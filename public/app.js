@@ -67,6 +67,7 @@
   var apiPromise = null;
   var volume = 0.7;
   var metaCache = new Map();
+  var SONG_ALIASES = window.SONG_ALIASES || {};
 
   var clipTimer = null;
   var clipRaf = 0;
@@ -496,6 +497,50 @@
     return { artist: artist, song: song };
   }
 
+  function addAnswers(track, values) {
+    var answers = track.answers || [];
+
+    (values || []).forEach(function (value) {
+      var text = String(value || '').trim();
+      if (text.length > 1 && answers.indexOf(text) === -1) answers.push(text);
+    });
+
+    track.answers = answers;
+  }
+
+  function applyAlias(track) {
+    var alias = SONG_ALIASES[track.id];
+    if (!alias) return track;
+
+    if (alias.title) track.title = alias.title;
+    if (alias.artist) track.artist = alias.artist;
+    if (alias.subtitle) track.subtitle = alias.subtitle;
+    if (alias.original) track.original = alias.original;
+    if (alias.anime) track.anime = alias.anime;
+
+    addAnswers(track, alias.aliases || []);
+    if (alias.anime) addAnswers(track, [alias.anime]);
+    if (alias.original) addAnswers(track, [alias.original]);
+
+    return track;
+  }
+
+  function trackSubtitle(track) {
+    var bits = [];
+
+    if (track.artist) bits.push(track.artist);
+    if (track.subtitle) bits.push(track.subtitle);
+    if (track.anime) bits.push(track.anime);
+
+    if (track.original &&
+        normalize(track.original) !== normalize(track.title) &&
+        normalize(track.original) !== normalize(track.subtitle || '')) {
+      bits.push('Original: ' + track.original);
+    }
+
+    return bits.join(' · ');
+  }
+
   function applyMeta(track, meta) {
     var raw = (meta.title || '').trim();
     var clean = cleanTitle(raw);
@@ -521,6 +566,8 @@
     track.answers = answers.filter(function (value, index, list) {
       return value && value.trim().length > 1 && list.indexOf(value) === index;
     });
+
+    applyAlias(track);
   }
 
   function normalize(text) {
@@ -572,11 +619,22 @@
     if (!g || !t) return false;
     if (g === t) return true;
 
+    var compactGuess = g.replace(/\s+/g, '');
+    var compactTarget = t.replace(/\s+/g, '');
+    if (compactGuess && compactTarget && compactGuess === compactTarget) return true;
+
     var ratio = similarity(g, t);
     if (ratio >= 0.88) return true;
 
     if (t.length >= 8 && g.length >= 4 && ratio >= 0.65) {
       if (t.indexOf(g) !== -1 || g.indexOf(t) !== -1) return true;
+    }
+
+    var compactRatio = similarity(compactGuess, compactTarget);
+    if (compactRatio >= 0.88) return true;
+
+    if (compactTarget.length >= 8 && compactGuess.length >= 4 && compactRatio >= 0.65) {
+      if (compactTarget.indexOf(compactGuess) !== -1 || compactGuess.indexOf(compactTarget) !== -1) return true;
     }
 
     var guessWords = g.split(' ').filter(function (word) { return word.length > 2; });
@@ -596,8 +654,11 @@
   }
 
   function isCorrect(guess, track) {
+    var raw = String(guess || '').trim().toLowerCase();
+
     return (track.answers || []).some(function (answer) {
-      return matches(guess, answer);
+      var text = String(answer || '').trim().toLowerCase();
+      return text === raw || matches(guess, answer);
     });
   }
 
@@ -660,17 +721,21 @@
       if (!track.title || !track.answers || !track.answers.length) return;
 
       var title = normalize(track.title);
-      var full = normalize((track.artist ? track.artist + ' ' : '') + track.title);
+      var full = normalize([track.artist, track.title, track.anime].filter(Boolean).join(' '));
+      var aliases = normalize((track.answers || []).concat(track.anime ? [track.anime] : []).join(' '));
       var score = -1;
 
       if (title.indexOf(query) === 0) score = 0;
       else if (full.indexOf(query) === 0) score = 1;
+      else if (aliases.indexOf(query) === 0) score = 1.5;
       else if (title.indexOf(query) !== -1) score = 2;
       else if (full.indexOf(query) !== -1) score = 3;
+      else if (aliases.indexOf(query) !== -1) score = 4;
 
       if (score < 0) return;
 
-      var key = title + '|' + normalize(track.artist || '');
+      var key = String(track.title || '').trim().toLowerCase() + '|' +
+        String(track.artist || '').trim().toLowerCase();
       if (seen[key]) return;
       seen[key] = true;
       found.push({ track: track, score: score });
@@ -703,10 +768,12 @@
       title.textContent = item.track.title;
       row.appendChild(title);
 
-      if (item.track.artist) {
+      var suggestionMeta = [item.track.artist, item.track.anime].filter(Boolean).join(' · ');
+
+      if (suggestionMeta) {
         var artist = document.createElement('span');
         artist.className = 'suggestion-artist';
-        artist.textContent = item.track.artist;
+        artist.textContent = suggestionMeta;
         row.appendChild(artist);
       }
 
@@ -937,10 +1004,13 @@
         answers.push(title + ' ' + artist);
       }
 
-      return {
+      var track = {
         id: item.id,
         title: title || item.title,
         artist: artist,
+        subtitle: '',
+        original: '',
+        anime: '',
         rawTitle: item.title,
         answers: answers.filter(function (value, index, list) {
           return value && value.trim().length > 1 && list.indexOf(value) === index;
@@ -950,6 +1020,9 @@
         thumbnail: playlist.cover || '',
         preview: item.preview
       };
+
+      applyAlias(track);
+      return track;
     });
   }
 
@@ -958,6 +1031,9 @@
       id: track.id,
       title: track.title || '',
       artist: track.artist || '',
+      subtitle: track.subtitle || '',
+      original: track.original || '',
+      anime: track.anime || '',
       rawTitle: track.rawTitle || '',
       answers: (track.answers || []).slice(),
       duration: 0,
@@ -1336,7 +1412,7 @@
       return;
     }
 
-    var key = normalize(value);
+    var key = normalize(value) || String(value).trim().toLowerCase();
 
     if (round.tried.indexOf(key) !== -1) {
       hideSuggestions();
@@ -1410,9 +1486,10 @@
     setCoverStatus(solved ? '¡Bien!' : 'La canción era…');
     el.revealHead.textContent = solved ? '¡Correcto!' : 'No era…';
     el.revealHead.className = 'reveal-head ' + (solved ? 'ok' : 'fail');
+    var revealMeta = trackSubtitle(track);
     el.revealSong.textContent = track.title || track.rawTitle || 'Canción';
-    el.revealArtist.textContent = track.artist || '';
-    el.revealArtist.hidden = !track.artist;
+    el.revealArtist.textContent = revealMeta;
+    el.revealArtist.hidden = !revealMeta;
     el.revealLink.href = isSpotify()
       ? 'https://open.spotify.com/track/' + track.id
       : 'https://www.youtube.com/watch?v=' + track.id;
@@ -1493,7 +1570,7 @@
       artist.className = 'result-artist';
       artist.textContent = result.unavailable
         ? 'No se pudo cargar desde ' + (isSpotify() ? 'Spotify' : 'YouTube')
-        : (result.track.artist || 'Artista desconocido');
+        : (trackSubtitle(result.track) || 'Artista desconocido');
 
       info.appendChild(song);
       info.appendChild(artist);

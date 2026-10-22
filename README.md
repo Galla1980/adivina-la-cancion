@@ -30,6 +30,13 @@ se mezcla al azar y tienes que adivinar cada canción escuchando fragmentos cada
 - Las playlists deben ser públicas o “no listadas”. Los vídeos que no permiten
   insertarse se saltan automáticamente.
 
+### Títulos en japonés
+
+- Los títulos japoneses se muestran en romaji o inglés y aceptan como respuesta el título
+  legible, el original, la traducción y, cuando corresponde, el nombre del anime.
+- Los alias están en `public/aliases.js`, indexados por ID de YouTube. Cada entrada puede
+  definir `title`, `subtitle`, `artist`, `original`, `anime` y `aliases`.
+
 ### Notas sobre Spotify
 
 - Se usan los **adelantos de 30 segundos** que Spotify publica para cada canción (sin cuenta,
