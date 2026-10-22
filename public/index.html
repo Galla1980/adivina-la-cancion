@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adivina la Canción</title>
+  <meta name="description" content="Juego para adivinar canciones de una playlist de YouTube o Spotify.">
+  <meta name="theme-color" content="#0b0b0c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230b0b0c'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23d4af37' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='3.5' fill='%23d4af37'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700;800;900&family=Marcellus&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="12" cy="12" r="3.2" fill="#d4af37" stroke="none"></circle>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Adivina la Canción</h1>
+          <p>Tu playlist, a ciegas.</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="score-chip" id="scoreChip" hidden>
+          <span>Puntos</span>
+          <strong id="scoreValue">0</strong>
+        </div>
+        <button type="button" id="quitBtn" class="btn ghost small" hidden>Salir</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="screen-start" class="screen">
+        <div class="card">
+          <h2>Pega la playlist</h2>
+          <p class="muted">
+            Copia el enlace de una playlist de <strong>YouTube</strong> o de <strong>Spotify</strong>. El orden se
+            mezcla al azar y solo escucharás fragmentos cortos: cuanto antes la aciertes, más puntos.
+          </p>
+
+          <label class="field">
+            <span>Enlace o ID de la playlist</span>
+            <input id="playlistInput" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="https://www.youtube.com/playlist?list=PL...  ·  https://open.spotify.com/playlist/...">
+          </label>
+
+          <div class="options">
+            <label class="field">
+              <span>Canciones</span>
+              <select id="songCount">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="0">Todas</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Dificultad</span>
+              <select id="difficulty">
+                <option value="facil">Fácil (fragmentos largos)</option>
+                <option value="normal" selected>Normal</option>
+                <option value="dificil">Difícil (1 segundo)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Sugerencias</span>
+              <select id="suggestToggle">
+                <option value="si" selected>Sí, al escribir</option>
+                <option value="no">No, a ciegas</option>
+              </select>
+            </label>
+          </div>
+
+          <button type="button" id="startBtn" class="btn primary block">
+            <span class="btn-label">Comenzar a jugar</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+
+          <p id="startStatus" class="status" hidden></p>
+          <p id="startError" class="error" hidden></p>
+
+          <details class="help">
+            <summary>Cómo jugar</summary>
+            <ul>
+              <li>Cada canción empieza con un fragmento de 1 segundo desde un punto aleatorio.</li>
+              <li>Escribe el título y pulsa <strong>Enter</strong>. Si fallas, el fragmento se alarga y el título que probaste queda tachado debajo (repetirlo no gasta intento).</li>
+              <li>Mientras escribes te sugiere títulos de la playlist (con flechas ↑ ↓ y Enter). Se puede desactivar en las opciones.</li>
+              <li>El botón <strong>Más tiempo</strong> salta tu oportunidad de adivinar y alarga el fragmento, pero baja los puntos en juego.</li>
+              <li>Tienes hasta 5 intentos por canción. La pista cuesta 15 puntos.</li>
+              <li>La playlist debe ser pública o “no listada”. Los vídeos que no permiten insertarse se saltan solos.</li>
+              <li>En Spotify se usan adelantos de 30 s (sin cuenta, Premium ni anuncios); las canciones sin adelanto se omiten.</li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
+      <section id="screen-game" class="screen" hidden>
+        <div class="hud">
+          <div class="hud-text">
+            <span id="roundLabel">Canción 1 de 20</span>
+            <span id="pointsLabel" class="muted"></span>
+          </div>
+          <div class="progress" aria-hidden="true"><div id="progressBar"></div></div>
+        </div>
+
+        <div class="player-card">
+          <div class="player-shell">
+            <div id="yt-player"></div>
+            <div class="player-cover" id="playerCover" data-state="loading">
+              <div class="cover-inner">
+                <div class="vinyl" aria-hidden="true"><span>?</span></div>
+                <div class="eq" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <p class="cover-status" id="coverStatus">Cargando…</p>
+                <button type="button" id="coverPlay" class="cover-play" aria-label="Reproducir fragmento">▶</button>
+              </div>
+            </div>
+          </div>
+          <div class="clip-timer" aria-hidden="true"><div id="clipBar"></div></div>
+        </div>
+
+        <div class="attempts" id="attempts" aria-label="Fragmentos escuchados"></div>
+
+        <form id="guessForm" class="guess-form" autocomplete="off">
+          <div class="guess-field">
+            <input id="guessInput" type="text" placeholder="Título de la canción…" spellcheck="false"
+                   autocomplete="off" autocapitalize="off" enterkeyhint="send" disabled
+                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="suggestions" aria-label="Título de la canción">
+            <div id="suggestions" class="suggestions" role="listbox" aria-label="Sugerencias" hidden></div>
+          </div>
+          <button type="submit" class="btn primary" id="guessBtn">Adivinar</button>
+        </form>
+
+        <div id="triedList" class="tried" aria-live="polite" hidden>
+          <span class="tried-label">Ya probaste:</span>
+          <span id="triedItems"></span>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="hintBtn" class="btn ghost small">Pista (−15)</button>
+          <button type="button" id="moreTimeBtn" class="btn ghost small">Más tiempo</button>
+          <button type="button" id="replayBtn" class="btn ghost small">Repetir fragmento</button>
+          <button type="button" id="skipBtn" class="btn ghost small">Saltar canción</button>
+          <label class="volume" title="Volumen">
+            <span class="volume-label" aria-hidden="true">VOL</span>
+            <input id="volume" type="range" min="0" max="100" value="70" aria-label="Volumen">
+          </label>
+        </div>
+
+        <p id="feedback" class="feedback" role="status"></p>
+
+        <div id="revealPanel" class="reveal" hidden>
+          <p id="revealHead" class="reveal-head ok">¡Correcto!</p>
+          <p id="revealSong" class="reveal-song">Canción</p>
+          <p id="revealArtist" class="reveal-artist"></p>
+          <div class="reveal-actions">
+            <a id="revealLink" class="btn ghost small" target="_blank" rel="noopener">Ver en YouTube</a>
+            <button type="button" id="revealFull" class="btn ghost small">Escuchar completa</button>
+            <button type="button" id="revealNext" class="btn primary small">Siguiente canción →</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-results" class="screen" hidden>
+        <div class="card results-card">
+          <p class="results-label">Puntuación final</p>
+          <p class="results-score" id="resultsScore">0</p>
+          <p class="results-summary" id="resultsSummary"></p>
+          <div class="results-list" id="resultsList"></div>
+          <div class="results-actions">
+            <button type="button" id="playAgain" class="btn primary">Jugar otra vez (misma playlist)</button>
+            <button type="button" id="newPlaylist" class="btn ghost">Cambiar playlist</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>El audio se reproduce desde YouTube o Spotify. Necesitas conexión a internet.</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
