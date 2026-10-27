@@ -9,6 +9,7 @@
   var POINTS = [100, 75, 55, 35, 20];
   var HINT_COST = 15;
   var STORAGE_KEY = 'adivina-la-cancion:config';
+  var DECK_PREFIX = 'adivina-la-cancion:deck:';
 
   var NOISE = /(official|oficial|videoclip|video\s*clip|music\s*video|v[ií]deo|audio|lyric|letra|hd|hq|uhd|4k|8k|remaster|remastered|remasterizad[oa]|visualizer|visualiser|en\s*vivo|live|en\s*directo|directo|acoustic|acústico|acustico|version|versión|extended|radio\s*edit|clip\s*officiel|m\/v|mv|performance|session|cover|karaoke|feat|ft\.|featuring|prod\.)/i;
 
@@ -90,7 +91,10 @@
     difficulty: 'normal',
     count: 20,
     suggestions: true,
-    token: 0
+    token: 0,
+    deck: [],
+    deckIndex: 0,
+    deckLoaded: false
   };
 
   /* ---------- Utilidades ---------- */
@@ -1593,10 +1597,114 @@
 
   /* ---------- Juego ---------- */
 
+  function deckKey() {
+    return DECK_PREFIX + game.source + ':' + game.playlistId;
+  }
+
+  function uniquePool() {
+    var seen = {};
+    return game.pool.filter(function (track) {
+      if (!track || !track.id || seen[track.id]) return false;
+      seen[track.id] = true;
+      return true;
+    });
+  }
+
+  function loadDeck() {
+    if (!game.playlistId) return [];
+
+    try {
+      var saved = JSON.parse(localStorage.getItem(deckKey()) || 'null');
+      if (!saved || !Array.isArray(saved.ids)) return [];
+
+      var byId = {};
+      game.pool.forEach(function (track) {
+        if (track.id) byId[track.id] = track;
+      });
+
+      var seen = {};
+      return saved.ids.map(function (id) {
+        if (!byId[id] || seen[id]) return null;
+        seen[id] = true;
+        return byId[id];
+      }).filter(Boolean);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveDeck() {
+    if (!game.playlistId) return;
+
+    try {
+      var seen = {};
+      var ids = [];
+
+      game.deck.slice(game.deckIndex).forEach(function (track) {
+        if (!track || !track.id || seen[track.id]) return;
+        seen[track.id] = true;
+        ids.push(track.id);
+      });
+
+      if (!ids.length) {
+        localStorage.removeItem(deckKey());
+        return;
+      }
+
+      localStorage.setItem(deckKey(), JSON.stringify({
+        ids: ids,
+        at: Date.now()
+      }));
+    } catch (error) { /* almacenamiento no disponible */ }
+  }
+
+  function rebuildDeck() {
+    var pool = uniquePool();
+
+    if (!pool.length) {
+      game.deck = [];
+      game.deckIndex = 0;
+      saveDeck();
+      return;
+    }
+
+    game.deck = shuffle(pool);
+    game.deckIndex = 0;
+    game.deckLoaded = true;
+    saveDeck();
+  }
+
+  function drawFromDeck() {
+    var available = uniquePool().length;
+    var count = game.count > 0 ? Math.min(game.count, available) : available;
+    var picked = [];
+    var pickedIds = {};
+
+    if (!available) return picked;
+
+    if (!game.deckLoaded) {
+      game.deck = loadDeck();
+      game.deckIndex = 0;
+      game.deckLoaded = true;
+    }
+
+    if (!game.deck.length || game.deckIndex >= game.deck.length) rebuildDeck();
+
+    while (picked.length < count && game.deckIndex < game.deck.length) {
+      var track = game.deck[game.deckIndex++];
+      if (!track || pickedIds[track.id]) continue;
+
+      pickedIds[track.id] = true;
+      picked.push(track);
+    }
+
+    saveDeck();
+    return picked;
+  }
+
   function startGame() {
     game.token++;
-    var pool = shuffle(game.pool);
-    var picked = game.count > 0 ? pool.slice(0, Math.min(game.count, pool.length)) : pool;
+    var picked = drawFromDeck();
 
     game.queue = picked.map(cloneTrack);
 
@@ -1627,6 +1735,9 @@
     game.source = source.type;
     game.playlistId = source.id;
     game.cover = '';
+    game.deck = [];
+    game.deckIndex = 0;
+    game.deckLoaded = false;
 
     showStartError('');
     setBusy(true);

@@ -23,6 +23,8 @@ se mezcla al azar y tienes que adivinar cada canción escuchando fragmentos cada
 - Puntos: 100 / 75 / 55 / 35 / 20 según el intento en que aciertes.
 - Al escribir, el juego autocompleta con títulos de **toda la playlist** (incluidas las canciones
   que no están en la partida). Se puede desactivar en las opciones.
+- Las canciones de una misma playlist no se repiten entre partidas: el juego usa un mazo sin
+  reposición guardado en el navegador. Cuando se agotan todas, se vuelve a barajar la playlist.
 - La pista cuesta 15 puntos; saltar la canción deja 0 puntos.
 - Si YouTube mete un anuncio, el juego lo detecta, no gasta tu intento y repite el
   fragmento cuando termina. Puedes pulsar «Saltar anuncio» (el vídeo se ve borroso).
@@ -53,7 +55,8 @@ se mezcla al azar y tienes que adivinar cada canción escuchando fragmentos cada
   para que el título no aparezca en el reproductor durante la partida.
 - `/api/spotify/playlist?id=…`: lee la página pública de Spotify y devuelve las canciones
   con su adelanto de audio (caché de 10 minutos).
-- El orden de las canciones se baraja en el navegador cada partida.
+- El orden se baraja con un mazo sin reposición por playlist, guardado en `localStorage`; una
+  canción no se repite hasta haber jugado todas las de esa playlist.
 
 Para cambiar el puerto: `set PORT=5000 && node server.js`.
 Para que no se abra el navegador solo: `node server.js --no-open`.
